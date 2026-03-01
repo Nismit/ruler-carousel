@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Ruler Carousel Demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <button id="open-btn">Open Carousel</button>
+
+    <div id="carousel-overlay" class="hidden">
+      <div id="carousel-container" class="hidden"></div>
+
+      <div id="control-panel">
+        <div id="control-header">
+          <div id="control-label-wrapper">
+            <div id="control-label">intensity</div>
+            <div id="color-preview"></div>
+          </div>
+          <div id="control-scale">
+            <span id="hold-label">HOLD</span>
+            <span id="control-value">x1</span>
+          </div>
+        </div>
+
+        <!-- Float: Slider -->
+        <div id="slider-control" class="control-ui">
+          <div id="slider-track">
+            <div id="slider-fill"></div>
+            <div id="slider-thumb"></div>
+          </div>
+          <div id="slider-range">
+            <span id="slider-min">0.00</span>
+            <span id="slider-max">1.00</span>
+          </div>
+        </div>
+
+        <!-- Vec2: 2D Pad -->
+        <div id="pad-control" class="control-ui hidden">
+          <div id="pad-area">
+            <div id="pad-thumb"></div>
+          </div>
+        </div>
+
+        <!-- Vec3: 3 Sliders -->
+        <div id="vec3-control" class="control-ui hidden">
+          <div class="vec3-slider-row">
+            <span class="vec3-slider-label">X</span>
+            <div class="vec3-slider-track" data-axis="x">
+              <div class="vec3-slider-fill"></div>
+              <div class="vec3-slider-thumb"></div>
+            </div>
+          </div>
+          <div class="vec3-slider-row">
+            <span class="vec3-slider-label">Y</span>
+            <div class="vec3-slider-track" data-axis="y">
+              <div class="vec3-slider-fill"></div>
+              <div class="vec3-slider-thumb"></div>
+            </div>
+          </div>
+          <div class="vec3-slider-row">
+            <span class="vec3-slider-label">Z</span>
+            <div class="vec3-slider-track" data-axis="z">
+              <div class="vec3-slider-fill"></div>
+              <div class="vec3-slider-thumb"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Vec3 Color: Hue Slider + SV Pad (HSV mode) -->
+        <div id="color-control" class="control-ui hidden">
+          <div id="color-hsv-wrapper">
+            <div id="color-sv-pad">
+              <div id="color-sv-thumb"></div>
+            </div>
+            <div id="color-hue-slider">
+              <div id="color-hue-thumb"></div>
+            </div>
+          </div>
+          <!-- OKLCH mode: 3 sliders -->
+          <div id="color-oklch-wrapper" class="hidden">
+            <div class="oklch-slider-row">
+              <span class="oklch-slider-label">L</span>
+              <div class="oklch-slider-track" data-channel="l">
+                <div class="oklch-slider-fill"></div>
+                <div class="oklch-slider-thumb"></div>
+              </div>
+            </div>
+            <div class="oklch-slider-row">
+              <span class="oklch-slider-label">C</span>
+              <div class="oklch-slider-track" data-channel="c">
+                <div class="oklch-slider-fill"></div>
+                <div class="oklch-slider-thumb"></div>
+              </div>
+            </div>
+            <div class="oklch-slider-row">
+              <span class="oklch-slider-label">H</span>
+              <div class="oklch-slider-track" data-channel="h">
+                <div class="oklch-slider-fill"></div>
+                <div class="oklch-slider-thumb"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button id="close-btn" aria-label="Close"></button>
+    </div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
