@@ -800,6 +800,7 @@ const showControlForType = (item) => {
   padControl.classList.add('hidden');
   vec3Control.classList.add('hidden');
   colorControl.classList.add('hidden');
+  colorPreview.classList.remove('visible');
 
   if (item.type === 'float') {
     sliderControl.classList.remove('hidden');

@@ -154,8 +154,8 @@ html, body {
 #control-panel {
   position: absolute;
   bottom: 44px;
-  left: 5%;
-  width: 90%;
+  left: 10%;
+  width: 80%;
   z-index: 30;
   padding: 0;
   border: none;
@@ -553,8 +553,8 @@ html, body {
 
 @media (max-width: 480px) {
   #control-panel {
-    width: 92%;
-    left: 4%;
+    width: 84%;
+    left: 8%;
   }
 
   #color-sv-pad {
