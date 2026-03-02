@@ -111,9 +111,9 @@ List of shader uniform variables. Each item has:
 ```javascript
 {
   name: 'uIntensity',  // Uniform name
-  type: 'float',       // Type: float | vec2 | vec3
+  type: 'float',       // Type: float | vec2 | vec3 | vec4
   label: 'intensity',  // Display label
-  isColor: false,      // For vec3: use color picker instead of 3 sliders
+  isColor: false,      // For vec3: use color picker instead of gesture pad
 }
 ```
 
@@ -123,8 +123,27 @@ List of shader uniform variables. Each item has:
 |------|---------|---------|
 | `float` | - | Horizontal slider |
 | `vec2` | - | 2D pad |
-| `vec3` | `false` | X/Y/Z three sliders |
+| `vec3` | `false` | Gesture-based 2D pad with XY/Z mode toggle |
 | `vec3` | `true` | HSV color picker (SV pad + Hue slider) or OKLCH sliders |
+| `vec4` | - | Gesture-based 2D pad with XY/ZW mode toggle |
+
+### Vec3/Vec4 Gesture-Based Controls
+
+Both vec3 (non-color) and vec4 use a gesture-based 2D pad interface:
+
+| Mode | Axes | Description |
+|------|------|-------------|
+| XY (default) | X, Y | Drag horizontally for X, vertically for Y |
+| Z (vec3) | Z | Drag horizontally for Z |
+| ZW (vec4) | Z, W | Drag horizontally for Z, vertically for W |
+
+**Mode Toggle:**
+- Double-tap on the pad
+- Tap the mode label (XY/Z/ZW)
+
+**Visual Feedback:**
+- XY mode: Default color (orange for vec3, purple for vec4)
+- Z/ZW mode: Orange color (#ffa94d)
 
 ### Edit Mode
 
@@ -153,10 +172,11 @@ For color controls, hold + swipe switches between HSV and OKLCH modes.
 
 ```javascript
 {
-  uIntensity: 0.5,                         // float
-  uOffset: { x: 0.5, y: 0.5 },             // vec2
-  uDirection: { x: 0.5, y: 0.5, z: 0.5 },  // vec3
-  uColor: { h: 0, s: 1, v: 1 },            // vec3 (color) - HSV format
+  uIntensity: 0.5,                              // float (0 to 1)
+  uOffset: { x: 0.5, y: 0.5 },                  // vec2 (0 to 1)
+  uDirection: { x: 0, y: 0, z: 0 },             // vec3 (-1 to 1)
+  uColor: { h: 0, s: 1, v: 1 },                 // vec3 (color) - HSV format
+  uTransform: { x: 0, y: 0, z: 0, w: 0 },       // vec4 (-1 to 1)
 }
 ```
 
