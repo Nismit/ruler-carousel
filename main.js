@@ -37,7 +37,9 @@ const padArea = document.getElementById('pad-area');
 const padThumb = document.getElementById('pad-thumb');
 
 const vec3Control = document.getElementById('vec3-control');
-const vec3Tracks = vec3Control.querySelectorAll('.vec3-slider-track');
+const vec3Pad = document.getElementById('vec3-pad');
+const vec3Thumb = document.getElementById('vec3-thumb');
+const vec3ModeLabel = document.getElementById('vec3-mode-label');
 
 const colorControl = document.getElementById('color-control');
 const colorHsvWrapper = document.getElementById('color-hsv-wrapper');
@@ -149,7 +151,7 @@ items.forEach(item => {
       // Store as HSV: h (0-360), s (0-1), v (0-1)
       uniformValues[item.name] = { h: 0, s: 1, v: 1 };
     } else {
-      uniformValues[item.name] = { x: 0.5, y: 0.5, z: 0.5 };
+      uniformValues[item.name] = { x: 0, y: 0, z: 0 };
     }
   }
 });
@@ -158,7 +160,8 @@ let currentItem = items[0];
 let isEditing = false;
 let isDraggingSlider = false;
 let isDraggingPad = false;
-let isDraggingVec3 = null; // 'x', 'y', 'z', or null
+let isDraggingVec3XY = false;
+let isDraggingVec3Z = false;
 let isDraggingColorSv = false;
 let isDraggingColorHue = false;
 
@@ -178,8 +181,8 @@ let padMaxX = 1;
 let padMinY = 0;
 let padMaxY = 1;
 
-// Vec3 range (dynamic based on scale)
-let vec3Min = { x: 0, y: 0, z: 0 };
+// Vec3 range (dynamic based on scale) - range is -1 to 1
+let vec3Min = { x: -1, y: -1, z: -1 };
 let vec3Max = { x: 1, y: 1, z: 1 };
 
 // Hold + swipe state for scale adjustment
@@ -243,11 +246,30 @@ const updatePadRange = (scale) => {
   padMaxY = rangeY.max;
 };
 
+const calculateVec3Range = (currentValue, scale) => {
+  // Vec3 has range -1 to 1 (total range = 2)
+  const range = 2 / scale;
+  let min = currentValue - range / 2;
+  let max = currentValue + range / 2;
+
+  // Clamp to -1 to 1 boundaries
+  if (min < -1) {
+    max = Math.min(1, max - (min + 1));
+    min = -1;
+  }
+  if (max > 1) {
+    min = Math.max(-1, min - (max - 1));
+    max = 1;
+  }
+
+  return { min, max };
+};
+
 const updateVec3Range = (scale) => {
   const currentValue = uniformValues[currentItem.name];
   const axes = ['x', 'y', 'z'];
   axes.forEach(axis => {
-    const range = calculateSliderRange(currentValue[axis], scale);
+    const range = calculateVec3Range(currentValue[axis], scale);
     vec3Min[axis] = range.min;
     vec3Max[axis] = range.max;
   });
@@ -505,85 +527,192 @@ padControl.addEventListener('touchmove', onPadTouchMove, { passive: false });
 padControl.addEventListener('touchend', onPadTouchEnd);
 padControl.addEventListener('touchcancel', onPadTouchEnd);
 
-// === Vec3 Three Sliders ===
+// === Vec3: Gesture-based (double-tap to toggle XY/Z mode) ===
+let vec3GestureMode = 'xy'; // 'xy' or 'z'
+let vec3TouchStartPos = { x: 0, y: 0 };
+let vec3HasMoved = false;
+let vec3LastTapTime = 0;
+const DOUBLE_TAP_DELAY = 300; // ms
+const TAP_MOVE_THRESHOLD = 10; // px
+
+const setVec3Mode = (mode) => {
+  vec3GestureMode = mode;
+  if (mode === 'z') {
+    vec3Thumb.classList.add('z-mode');
+    vec3ModeLabel.classList.add('z-mode');
+    vec3ModeLabel.textContent = 'Z';
+  } else {
+    vec3Thumb.classList.remove('z-mode');
+    vec3ModeLabel.classList.remove('z-mode');
+    vec3ModeLabel.textContent = 'XY';
+  }
+  // Update thumb position for current mode
+  updateVec3(uniformValues[currentItem.name]);
+};
+
+const toggleVec3Mode = () => {
+  setVec3Mode(vec3GestureMode === 'xy' ? 'z' : 'xy');
+};
+
 const updateVec3 = (value) => {
-  const axes = ['x', 'y', 'z'];
-  axes.forEach(axis => {
-    const track = vec3Control.querySelector(`.vec3-slider-track[data-axis="${axis}"]`);
-    const fill = track.querySelector('.vec3-slider-fill');
-    const thumb = track.querySelector('.vec3-slider-thumb');
-    // Calculate position within current range
-    const range = vec3Max[axis] - vec3Min[axis];
-    const percent = range > 0 ? Math.max(0, Math.min(1, (value[axis] - vec3Min[axis]) / range)) * 100 : 50;
-    fill.style.width = `${percent}%`;
-    thumb.style.left = `${percent}%`;
-  });
+  if (vec3GestureMode === 'z') {
+    // Z mode: show Z value horizontally, Y centered
+    const rangeZ = vec3Max.z - vec3Min.z;
+    const percentZ = rangeZ > 0 ? Math.max(0, Math.min(1, (value.z - vec3Min.z) / rangeZ)) * 100 : 50;
+    vec3Thumb.style.left = `${percentZ}%`;
+    vec3Thumb.style.top = '50%';
+  } else {
+    // XY mode: show X horizontally, Y vertically
+    const rangeX = vec3Max.x - vec3Min.x;
+    const rangeY = vec3Max.y - vec3Min.y;
+    const percentX = rangeX > 0 ? Math.max(0, Math.min(1, (value.x - vec3Min.x) / rangeX)) * 100 : 50;
+    const percentY = rangeY > 0 ? Math.max(0, Math.min(1, (value.y - vec3Min.y) / rangeY)) * 100 : 50;
+    vec3Thumb.style.left = `${percentX}%`;
+    vec3Thumb.style.top = `${percentY}%`;
+  }
+
+  // Update label (Cartesian format)
   controlLabel.textContent = `${value.x.toFixed(2)}, ${value.y.toFixed(2)}, ${value.z.toFixed(2)}`;
   controlValue.textContent = `x${vec3Scale}`;
 };
 
-const updateVec3FromPosition = (axis, clientX) => {
-  const track = vec3Control.querySelector(`.vec3-slider-track[data-axis="${axis}"]`);
-  const rect = track.getBoundingClientRect();
-  const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+const updateVec3XYFromPosition = (clientX, clientY) => {
+  const rect = vec3Pad.getBoundingClientRect();
+  const percentX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const percentY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+
   // Map percent to value within current range
-  const val = vec3Min[axis] + percent * (vec3Max[axis] - vec3Min[axis]);
+  const x = vec3Min.x + percentX * (vec3Max.x - vec3Min.x);
+  const y = vec3Min.y + percentY * (vec3Max.y - vec3Min.y);
+
   const current = uniformValues[currentItem.name];
-  uniformValues[currentItem.name] = { ...current, [axis]: val };
+  uniformValues[currentItem.name] = { ...current, x, y };
+  updateVec3(uniformValues[currentItem.name]);
+};
+
+const updateVec3ZFromDelta = (deltaX) => {
+  // Sensitivity: pixels to value change (horizontal)
+  const sensitivity = 0.005;
+  const rangeZ = vec3Max.z - vec3Min.z;
+  const deltaZ = deltaX * sensitivity * rangeZ;
+
+  const current = uniformValues[currentItem.name];
+  const newZ = Math.max(vec3Min.z, Math.min(vec3Max.z, current.z + deltaZ));
+  uniformValues[currentItem.name] = { ...current, z: newZ };
   updateVec3(uniformValues[currentItem.name]);
 };
 
 const onVec3Start = (e) => {
-  // Mouse event only
+  // Mouse: prepare for drag (don't update values yet)
   if (!e.touches) {
-    const track = e.target.closest('.vec3-slider-track');
-    if (!track) return;
-    isDraggingVec3 = track.dataset.axis;
-    updateVec3FromPosition(isDraggingVec3, e.clientX);
+    vec3HasMoved = false;
+    vec3TouchStartPos = { x: e.clientX, y: e.clientY };
+    isDraggingVec3XY = true;
   }
 };
 
 const onVec3Move = (e) => {
   if (isHolding) return;
-  if (!isDraggingVec3) return;
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  updateVec3FromPosition(isDraggingVec3, clientX);
+  if (e.touches) return; // Touch handling is done separately
+
+  if (!isDraggingVec3XY) return;
+
+  const dx = e.clientX - vec3TouchStartPos.x;
+  const dy = e.clientY - vec3TouchStartPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist > TAP_MOVE_THRESHOLD) {
+    vec3HasMoved = true;
+  }
+
+  // Only update values when dragging
+  if (vec3HasMoved) {
+    if (vec3GestureMode === 'xy') {
+      updateVec3XYFromPosition(e.clientX, e.clientY);
+    } else {
+      // Z mode: horizontal drag only
+      updateVec3ZFromDelta(dx);
+      vec3TouchStartPos.x = e.clientX;
+    }
+  }
 };
 
 const onVec3End = () => {
-  isDraggingVec3 = null;
+  isDraggingVec3XY = false;
+  isDraggingVec3Z = false;
+  // Don't reset mode on end - keep current mode
 };
 
-vec3Tracks.forEach(track => {
-  track.addEventListener('mousedown', onVec3Start);
+// Mouse events
+vec3Pad.addEventListener('mousedown', onVec3Start);
+vec3Pad.addEventListener('dblclick', (e) => {
+  e.preventDefault();
+  toggleVec3Mode();
 });
 
-// === Vec3 Touch ===
-const onVec3TouchStart = (e) => {
-  if (e.touches.length === 1 && !isHolding) {
-    const track = e.target.closest('.vec3-slider-track');
-    if (!track) return;
-    isDraggingVec3 = track.dataset.axis;
-    updateVec3FromPosition(isDraggingVec3, e.touches[0].clientX);
-  }
-};
+// Mode label tap to toggle
+vec3ModeLabel.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleVec3Mode();
+});
 
-const onVec3TouchMove = (e) => {
-  if (e.touches.length === 1 && isDraggingVec3 && !isHolding) {
-    updateVec3FromPosition(isDraggingVec3, e.touches[0].clientX);
-  }
-};
+vec3ModeLabel.addEventListener('touchend', (e) => {
+  e.stopPropagation();
+  e.preventDefault();
+  toggleVec3Mode();
+});
 
-const onVec3TouchEnd = (e) => {
+// Touch events - drag only changes values, tap for mode toggle
+vec3Pad.addEventListener('touchstart', (e) => {
+  if (isHolding) return;
+  if (e.touches.length !== 1) return;
+
+  vec3HasMoved = false;
+  vec3TouchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  isDraggingVec3XY = true;
+}, { passive: true });
+
+vec3Pad.addEventListener('touchmove', (e) => {
+  if (isHolding) return;
+  if (e.touches.length !== 1 || !isDraggingVec3XY) return;
+
+  const dx = e.touches[0].clientX - vec3TouchStartPos.x;
+  const dy = e.touches[0].clientY - vec3TouchStartPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist > TAP_MOVE_THRESHOLD) {
+    vec3HasMoved = true;
+  }
+
+  // Only update values when dragging (moved beyond threshold)
+  if (vec3HasMoved) {
+    if (vec3GestureMode === 'xy') {
+      updateVec3XYFromPosition(e.touches[0].clientX, e.touches[0].clientY);
+    } else {
+      // Z mode: horizontal drag only
+      updateVec3ZFromDelta(dx);
+      vec3TouchStartPos.x = e.touches[0].clientX;
+    }
+  }
+}, { passive: true });
+
+vec3Pad.addEventListener('touchend', (e) => {
   if (e.touches.length === 0) {
-    isDraggingVec3 = null;
+    // Check for tap (no significant movement) - double tap toggles mode
+    if (!vec3HasMoved) {
+      const now = Date.now();
+      if (now - vec3LastTapTime < DOUBLE_TAP_DELAY) {
+        toggleVec3Mode();
+        vec3LastTapTime = 0;
+      } else {
+        vec3LastTapTime = now;
+      }
+    }
+    onVec3End();
   }
-};
+});
 
-vec3Control.addEventListener('touchstart', onVec3TouchStart, { passive: false });
-vec3Control.addEventListener('touchmove', onVec3TouchMove, { passive: false });
-vec3Control.addEventListener('touchend', onVec3TouchEnd);
-vec3Control.addEventListener('touchcancel', onVec3TouchEnd);
+vec3Pad.addEventListener('touchcancel', onVec3End);
 
 // === Color Picker (HSV) ===
 const updateColor = (value) => {
@@ -844,6 +973,8 @@ const exitEditMode = () => {
   if (!isEditing) return;
   isEditing = false;
   controlPanel.classList.remove('visible');
+  // Reset vec3 mode to XY
+  setVec3Mode('xy');
   // Delay re-enabling carousel to prevent synthetic click from re-entering edit mode
   setTimeout(() => {
     carousel.enable();
