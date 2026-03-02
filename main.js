@@ -415,6 +415,9 @@ const cancelHoldTimer = () => {
 };
 
 const handleHoldMove = (e) => {
+  // Only process in edit mode
+  if (!isEditing && !isHolding) return;
+
   if (!isHolding) {
     // Check if moved too much before hold triggered - cancel
     if (holdTimer) {
@@ -1197,13 +1200,37 @@ const exitEditMode = () => {
   if (!isEditing) return;
   isEditing = false;
   controlPanel.classList.remove('visible');
-  // Reset vec3/vec4 mode to XY
-  setVec3Mode('xy');
-  setVec4Mode('xy');
-  // Delay re-enabling carousel to prevent synthetic click from re-entering edit mode
-  setTimeout(() => {
-    carousel.enable();
-  }, 50);
+
+  // Reset all drag states
+  isDraggingSlider = false;
+  isDraggingPad = false;
+  isDraggingVec3XY = false;
+  isDraggingVec3Z = false;
+  isDraggingVec4 = false;
+  isDraggingColorSv = false;
+  isDraggingColorHue = false;
+  isDraggingOklch = null;
+
+  // Reset hold state
+  cancelHoldTimer();
+  isHolding = false;
+  holdScaleType = null;
+  holdLabelEl.classList.remove('active');
+  controlValue.classList.remove('active');
+
+  // Reset vec3/vec4 mode to XY (only update visual state, not values)
+  vec3GestureMode = 'xy';
+  vec3Thumb.classList.remove('z-mode');
+  vec3ModeLabel.classList.remove('z-mode');
+  vec3ModeLabel.textContent = 'XY';
+
+  vec4GestureMode = 'xy';
+  vec4Thumb.classList.remove('zw-mode');
+  vec4ModeLabel.classList.remove('zw-mode');
+  vec4ModeLabel.textContent = 'XY';
+
+  // Re-enable carousel immediately
+  carousel.enable();
 };
 
 const carousel = new RulerCarousel(carouselContainer, {
