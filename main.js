@@ -10,10 +10,10 @@ const items = [
   { name: 'uRotation', type: 'vec3', label: 'rotation' },
   { name: 'uColor', type: 'vec3', label: 'color', isColor: true },
   { name: 'uAmbient', type: 'vec3', label: 'ambient', isColor: true },
+  { name: 'uTransform', type: 'vec4', label: 'transform' },
+  { name: 'uBounds', type: 'vec4', label: 'bounds' },
   { name: 'uFrequency', type: 'float', label: 'frequency' },
   { name: 'uAmplitude', type: 'float', label: 'amplitude' },
-  { name: 'uPhase', type: 'float', label: 'phase' },
-  { name: 'uNoise', type: 'float', label: 'noise' },
   { name: 'uBloom', type: 'float', label: 'bloom' },
 ];
 
@@ -40,6 +40,11 @@ const vec3Control = document.getElementById('vec3-control');
 const vec3Pad = document.getElementById('vec3-pad');
 const vec3Thumb = document.getElementById('vec3-thumb');
 const vec3ModeLabel = document.getElementById('vec3-mode-label');
+
+const vec4Control = document.getElementById('vec4-control');
+const vec4Pad = document.getElementById('vec4-pad');
+const vec4Thumb = document.getElementById('vec4-thumb');
+const vec4ModeLabel = document.getElementById('vec4-mode-label');
 
 const colorControl = document.getElementById('color-control');
 const colorHsvWrapper = document.getElementById('color-hsv-wrapper');
@@ -153,6 +158,8 @@ items.forEach(item => {
     } else {
       uniformValues[item.name] = { x: 0, y: 0, z: 0 };
     }
+  } else if (item.type === 'vec4') {
+    uniformValues[item.name] = { x: 0, y: 0, z: 0, w: 0 };
   }
 });
 
@@ -162,6 +169,7 @@ let isDraggingSlider = false;
 let isDraggingPad = false;
 let isDraggingVec3XY = false;
 let isDraggingVec3Z = false;
+let isDraggingVec4 = false;
 let isDraggingColorSv = false;
 let isDraggingColorHue = false;
 
@@ -170,6 +178,7 @@ const SCALE_LEVELS = [0.25, 0.5, 1, 2, 4];
 let sliderScale = 1;
 let padScale = 1;
 let vec3Scale = 1;
+let vec4Scale = 1;
 
 // Slider range (dynamic based on scale)
 let sliderMin = 0;
@@ -184,6 +193,10 @@ let padMaxY = 1;
 // Vec3 range (dynamic based on scale) - range is -1 to 1
 let vec3Min = { x: -1, y: -1, z: -1 };
 let vec3Max = { x: 1, y: 1, z: 1 };
+
+// Vec4 range (dynamic based on scale) - range is -1 to 1
+let vec4Min = { x: -1, y: -1, z: -1, w: -1 };
+let vec4Max = { x: 1, y: 1, z: 1, w: 1 };
 
 // Hold + swipe state for scale adjustment
 let isHolding = false;
@@ -272,6 +285,16 @@ const updateVec3Range = (scale) => {
     const range = calculateVec3Range(currentValue[axis], scale);
     vec3Min[axis] = range.min;
     vec3Max[axis] = range.max;
+  });
+};
+
+const updateVec4Range = (scale) => {
+  const currentValue = uniformValues[currentItem.name];
+  const axes = ['x', 'y', 'z', 'w'];
+  axes.forEach(axis => {
+    const range = calculateVec3Range(currentValue[axis], scale); // Reuse same calc (-1 to 1 range)
+    vec4Min[axis] = range.min;
+    vec4Max[axis] = range.max;
   });
 };
 
@@ -367,6 +390,9 @@ const startHoldTimer = (e) => {
   } else if (currentItem.type === 'vec3' && !currentItem.isColor) {
     holdStartScale = vec3Scale;
     holdScaleType = 'vec3';
+  } else if (currentItem.type === 'vec4') {
+    holdStartScale = vec4Scale;
+    holdScaleType = 'vec4';
   } else if (currentItem.isColor) {
     holdColorModeIndex = COLOR_MODES.indexOf(colorMode);
     holdScaleType = 'color';
@@ -432,6 +458,10 @@ const handleHoldMove = (e) => {
       vec3Scale = newScale;
       updateVec3Range(vec3Scale);
       updateVec3(uniformValues[currentItem.name]);
+    } else if (holdScaleType === 'vec4' && newScale !== vec4Scale) {
+      vec4Scale = newScale;
+      updateVec4Range(vec4Scale);
+      updateVec4(uniformValues[currentItem.name]);
     }
   }
 };
@@ -714,6 +744,189 @@ vec3Pad.addEventListener('touchend', (e) => {
 
 vec3Pad.addEventListener('touchcancel', onVec3End);
 
+// === Vec4: Gesture-based (double-tap to toggle XY/ZW mode) ===
+let vec4GestureMode = 'xy'; // 'xy' or 'zw'
+let vec4TouchStartPos = { x: 0, y: 0 };
+let vec4HasMoved = false;
+let vec4LastTapTime = 0;
+
+const setVec4Mode = (mode) => {
+  vec4GestureMode = mode;
+  if (mode === 'zw') {
+    vec4Thumb.classList.add('zw-mode');
+    vec4ModeLabel.classList.add('zw-mode');
+    vec4ModeLabel.textContent = 'ZW';
+  } else {
+    vec4Thumb.classList.remove('zw-mode');
+    vec4ModeLabel.classList.remove('zw-mode');
+    vec4ModeLabel.textContent = 'XY';
+  }
+  // Update thumb position for current mode
+  updateVec4(uniformValues[currentItem.name]);
+};
+
+const toggleVec4Mode = () => {
+  setVec4Mode(vec4GestureMode === 'xy' ? 'zw' : 'xy');
+};
+
+const updateVec4 = (value) => {
+  if (vec4GestureMode === 'zw') {
+    // ZW mode: show Z horizontally, W vertically
+    const rangeZ = vec4Max.z - vec4Min.z;
+    const rangeW = vec4Max.w - vec4Min.w;
+    const percentZ = rangeZ > 0 ? Math.max(0, Math.min(1, (value.z - vec4Min.z) / rangeZ)) * 100 : 50;
+    const percentW = rangeW > 0 ? Math.max(0, Math.min(1, (value.w - vec4Min.w) / rangeW)) * 100 : 50;
+    vec4Thumb.style.left = `${percentZ}%`;
+    vec4Thumb.style.top = `${percentW}%`;
+  } else {
+    // XY mode: show X horizontally, Y vertically
+    const rangeX = vec4Max.x - vec4Min.x;
+    const rangeY = vec4Max.y - vec4Min.y;
+    const percentX = rangeX > 0 ? Math.max(0, Math.min(1, (value.x - vec4Min.x) / rangeX)) * 100 : 50;
+    const percentY = rangeY > 0 ? Math.max(0, Math.min(1, (value.y - vec4Min.y) / rangeY)) * 100 : 50;
+    vec4Thumb.style.left = `${percentX}%`;
+    vec4Thumb.style.top = `${percentY}%`;
+  }
+
+  // Update label (all 4 components)
+  controlLabel.textContent = `${value.x.toFixed(2)}, ${value.y.toFixed(2)}, ${value.z.toFixed(2)}, ${value.w.toFixed(2)}`;
+  controlValue.textContent = `x${vec4Scale}`;
+};
+
+const updateVec4XYFromPosition = (clientX, clientY) => {
+  const rect = vec4Pad.getBoundingClientRect();
+  const percentX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const percentY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+
+  // Map percent to value within current range
+  const x = vec4Min.x + percentX * (vec4Max.x - vec4Min.x);
+  const y = vec4Min.y + percentY * (vec4Max.y - vec4Min.y);
+
+  const current = uniformValues[currentItem.name];
+  uniformValues[currentItem.name] = { ...current, x, y };
+  updateVec4(uniformValues[currentItem.name]);
+};
+
+const updateVec4ZWFromPosition = (clientX, clientY) => {
+  const rect = vec4Pad.getBoundingClientRect();
+  const percentZ = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const percentW = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+
+  // Map percent to value within current range
+  const z = vec4Min.z + percentZ * (vec4Max.z - vec4Min.z);
+  const w = vec4Min.w + percentW * (vec4Max.w - vec4Min.w);
+
+  const current = uniformValues[currentItem.name];
+  uniformValues[currentItem.name] = { ...current, z, w };
+  updateVec4(uniformValues[currentItem.name]);
+};
+
+const onVec4Start = (e) => {
+  // Mouse: prepare for drag (don't update values yet)
+  if (!e.touches) {
+    vec4HasMoved = false;
+    vec4TouchStartPos = { x: e.clientX, y: e.clientY };
+    isDraggingVec4 = true;
+  }
+};
+
+const onVec4Move = (e) => {
+  if (isHolding) return;
+  if (e.touches) return; // Touch handling is done separately
+
+  if (!isDraggingVec4) return;
+
+  const dx = e.clientX - vec4TouchStartPos.x;
+  const dy = e.clientY - vec4TouchStartPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist > TAP_MOVE_THRESHOLD) {
+    vec4HasMoved = true;
+  }
+
+  // Only update values when dragging
+  if (vec4HasMoved) {
+    if (vec4GestureMode === 'xy') {
+      updateVec4XYFromPosition(e.clientX, e.clientY);
+    } else {
+      updateVec4ZWFromPosition(e.clientX, e.clientY);
+    }
+  }
+};
+
+const onVec4End = () => {
+  isDraggingVec4 = false;
+};
+
+// Mouse events
+vec4Pad.addEventListener('mousedown', onVec4Start);
+vec4Pad.addEventListener('dblclick', (e) => {
+  e.preventDefault();
+  toggleVec4Mode();
+});
+
+// Mode label tap to toggle
+vec4ModeLabel.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleVec4Mode();
+});
+
+vec4ModeLabel.addEventListener('touchend', (e) => {
+  e.stopPropagation();
+  e.preventDefault();
+  toggleVec4Mode();
+});
+
+// Touch events - drag only changes values, tap for mode toggle
+vec4Pad.addEventListener('touchstart', (e) => {
+  if (isHolding) return;
+  if (e.touches.length !== 1) return;
+
+  vec4HasMoved = false;
+  vec4TouchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  isDraggingVec4 = true;
+}, { passive: true });
+
+vec4Pad.addEventListener('touchmove', (e) => {
+  if (isHolding) return;
+  if (e.touches.length !== 1 || !isDraggingVec4) return;
+
+  const dx = e.touches[0].clientX - vec4TouchStartPos.x;
+  const dy = e.touches[0].clientY - vec4TouchStartPos.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist > TAP_MOVE_THRESHOLD) {
+    vec4HasMoved = true;
+  }
+
+  // Only update values when dragging (moved beyond threshold)
+  if (vec4HasMoved) {
+    if (vec4GestureMode === 'xy') {
+      updateVec4XYFromPosition(e.touches[0].clientX, e.touches[0].clientY);
+    } else {
+      updateVec4ZWFromPosition(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }
+}, { passive: true });
+
+vec4Pad.addEventListener('touchend', (e) => {
+  if (e.touches.length === 0) {
+    // Check for tap (no significant movement) - double tap toggles mode
+    if (!vec4HasMoved) {
+      const now = Date.now();
+      if (now - vec4LastTapTime < DOUBLE_TAP_DELAY) {
+        toggleVec4Mode();
+        vec4LastTapTime = 0;
+      } else {
+        vec4LastTapTime = now;
+      }
+    }
+    onVec4End();
+  }
+});
+
+vec4Pad.addEventListener('touchcancel', onVec4End);
+
 // === Color Picker (HSV) ===
 const updateColor = (value) => {
   const percentS = Math.max(0, Math.min(1, value.s)) * 100;
@@ -898,6 +1111,7 @@ window.addEventListener('mousemove', (e) => {
   onSliderMove(e);
   onPadMove(e);
   onVec3Move(e);
+  onVec4Move(e);
   onColorMove(e);
   onOklchMove(e);
 });
@@ -905,6 +1119,7 @@ window.addEventListener('mouseup', () => {
   onSliderEnd();
   onPadEnd();
   onVec3End();
+  onVec4End();
   onColorEnd();
   onOklchEnd();
 });
@@ -912,6 +1127,7 @@ window.addEventListener('touchmove', (e) => {
   onSliderMove(e);
   onPadMove(e);
   onVec3Move(e);
+  onVec4Move(e);
   onColorMove(e);
   onOklchMove(e);
 }, { passive: true });
@@ -919,6 +1135,7 @@ window.addEventListener('touchend', () => {
   onSliderEnd();
   onPadEnd();
   onVec3End();
+  onVec4End();
   onColorEnd();
   onOklchEnd();
 });
@@ -928,6 +1145,7 @@ const showControlForType = (item) => {
   sliderControl.classList.add('hidden');
   padControl.classList.add('hidden');
   vec3Control.classList.add('hidden');
+  vec4Control.classList.add('hidden');
   colorControl.classList.add('hidden');
   colorPreview.classList.remove('visible');
 
@@ -956,6 +1174,12 @@ const showControlForType = (item) => {
       updateVec3(uniformValues[item.name]);
       holdLabelEl.style.display = '';
     }
+  } else if (item.type === 'vec4') {
+    vec4Control.classList.remove('hidden');
+    vec4Scale = 1;
+    updateVec4Range(vec4Scale);
+    updateVec4(uniformValues[item.name]);
+    holdLabelEl.style.display = '';
   }
 };
 
@@ -973,8 +1197,9 @@ const exitEditMode = () => {
   if (!isEditing) return;
   isEditing = false;
   controlPanel.classList.remove('visible');
-  // Reset vec3 mode to XY
+  // Reset vec3/vec4 mode to XY
   setVec3Mode('xy');
+  setVec4Mode('xy');
   // Delay re-enabling carousel to prevent synthetic click from re-entering edit mode
   setTimeout(() => {
     carousel.enable();

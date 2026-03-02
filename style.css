@@ -669,6 +669,88 @@ html, body {
   background: #da77f2;
 }
 
+/* Vec4: Gesture-based Pad */
+#vec4-pad {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 1;
+  max-height: 140px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: crosshair;
+  touch-action: none;
+  overflow: hidden;
+}
+
+#vec4-pad::before,
+#vec4-pad::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+
+#vec4-pad::before {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+#vec4-pad::after {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+#vec4-thumb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  background: #da77f2;
+  border: 2px solid var(--text-color);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: background-color 0.15s ease;
+}
+
+#vec4-thumb.zw-mode {
+  background: #ffa94d;
+}
+
+#vec4-mode-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+}
+
+#vec4-mode-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+#vec4-mode-label:active {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+#vec4-mode-label.zw-mode {
+  color: #ffa94d;
+  border-color: rgba(255, 169, 77, 0.3);
+}
+
 /* Mobile */
 @media (max-width: 480px) {
   .ruler-carousel {
