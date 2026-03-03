@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Ruler Carousel Demo</title>
+  <link rel="stylesheet" href="../styles/ruler-carousel.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --accent-color: var(--ruler-accent);
+      --bg-color: #1a1a2e;
+      --item-bg: var(--ruler-bg);
+      --item-border: var(--ruler-border);
+      --text-color: var(--ruler-text);
+      --text-muted: var(--ruler-text-muted);
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-color);
+      color: var(--text-color);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Open Button */
+    #open-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 16px 32px;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-color);
+      background: var(--item-bg);
+      border: 1px solid var(--item-border);
+      border-radius: 8px;
+      cursor: pointer;
+      z-index: 5;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    #open-btn:hover {
+      background: rgba(30, 30, 45, 0.95);
+      border-color: var(--accent-color);
+    }
+
+    /* Carousel Overlay */
+    #carousel-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      background: transparent;
+      pointer-events: none;
+    }
+
+    #carousel-overlay.visible {
+      pointer-events: none;
+    }
+
+    #carousel-overlay.hidden {
+      pointer-events: none;
+    }
+
+    #carousel-overlay.visible #carousel-container,
+    #carousel-overlay.visible #close-btn,
+    #carousel-overlay.visible #control-panel.visible {
+      pointer-events: auto;
+    }
+
+    /* Close Button */
+    #close-btn {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      background: transparent;
+      border: 1px solid var(--text-muted);
+      border-radius: 50%;
+      cursor: pointer;
+      z-index: 25;
+      opacity: 0;
+      transition: opacity 0.3s ease-out;
+    }
+
+    #close-btn::before,
+    #close-btn::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 14px;
+      height: 1.5px;
+      background: var(--text-muted);
+      border-radius: 1px;
+    }
+
+    #close-btn::before {
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    #close-btn::after {
+      transform: translate(-50%, -50%) rotate(-45deg);
+    }
+
+    #close-btn.visible {
+      opacity: 1;
+    }
+
+    /* Carousel Container */
+    #carousel-container {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #carousel-container.visible {
+      transform: translateX(0);
+    }
+
+    #carousel-container.hidden {
+      transform: translateX(100%);
+    }
+
+    /* Control Panel */
+    #control-panel {
+      position: absolute;
+      bottom: 44px;
+      left: 10%;
+      width: 80%;
+      z-index: 30;
+      padding: 0;
+      border: none;
+      background: transparent;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+      pointer-events: none;
+    }
+
+    #control-panel.visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    #control-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    #control-label-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #control-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #control-scale {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #control-value {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Control Container */
+    #control-container {
+      touch-action: none;
+    }
+
+    @media (max-width: 768px) {
+      #close-btn {
+        top: 12px;
+        left: 12px;
+      }
+
+      #control-panel {
+        bottom: 32px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      #control-panel {
+        width: 84%;
+        left: 8%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <button id="open-btn">Open Carousel</button>
+
+    <div id="carousel-overlay" class="hidden">
+      <div id="carousel-container" class="hidden"></div>
+
+      <div id="control-panel">
+        <div id="control-header">
+          <div id="control-label-wrapper">
+            <div id="control-label">-</div>
+          </div>
+          <div id="control-scale">
+            <span id="control-value">x1</span>
+          </div>
+        </div>
+        <div id="control-container"></div>
+      </div>
+
+      <button id="close-btn" aria-label="Close"></button>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
