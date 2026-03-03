@@ -1,5 +1,21 @@
 /**
  * RulerCarousel - A ruler-style vertical carousel with iOS picker-like infinite loop.
+ *
+ * @typedef {Object} ResponsiveConfig
+ * @property {number} itemSpacing
+ * @property {number} tickWidth
+ * @property {number} tickWidthActive
+ * @property {number} fontSize
+ * @property {number} fontSizeActive
+ *
+ * @typedef {Object} RulerCarouselOptions
+ * @property {HTMLElement} [eventTarget] - Element to attach events to
+ * @property {Array<{name: string, type: string, label: string}>} [items] - Carousel items
+ * @property {number} [initialIndex] - Initial selected index
+ * @property {(index: number, item: any) => void} [onSelect] - Selection callback
+ * @property {(index: number, item: any) => void} [onConfirm] - Confirm callback
+ * @property {() => void} [onBackgroundTap] - Background tap callback
+ * @property {{mobile: ResponsiveConfig, tablet: ResponsiveConfig, desktop: ResponsiveConfig}} [responsive] - Responsive values
  */
 export class RulerCarousel {
   // Physics constants
@@ -13,11 +29,41 @@ export class RulerCarousel {
   static SPRING_STIFFNESS = 0.12;
   static SPRING_DAMPING = 0.7;
 
+  // Default responsive breakpoints
+  static DEFAULT_RESPONSIVE = {
+    mobile: { // <= 480px
+      itemSpacing: 36,
+      tickWidth: 20,
+      tickWidthActive: 32,
+      fontSize: 11,
+      fontSizeActive: 13,
+    },
+    tablet: { // <= 768px
+      itemSpacing: 42,
+      tickWidth: 24,
+      tickWidthActive: 40,
+      fontSize: 12,
+      fontSizeActive: 14,
+    },
+    desktop: { // > 768px
+      itemSpacing: 48,
+      tickWidth: 28,
+      tickWidthActive: 48,
+      fontSize: 13,
+      fontSizeActive: 16,
+    },
+  };
+
+  /**
+   * @param {HTMLElement} container
+   * @param {RulerCarouselOptions} options
+   */
   constructor(container, options = {}) {
     this.container = container;
     this.eventTarget = options.eventTarget || container;
     this.items = options.items || [];
     this.selectedIndex = options.initialIndex || 0;
+    this.responsive = { ...RulerCarousel.DEFAULT_RESPONSIVE, ...options.responsive };
 
     this.repeatCount = 5;
     this.totalItems = this.items.length * this.repeatCount;
@@ -48,10 +94,12 @@ export class RulerCarousel {
 
     this.element = null;
     this.axisLine = null;
+    this.itemsContainer = null;
     this.itemElements = [];
 
     this.animationId = null;
     this._boundHandlers = null;
+    this._itemClickHandlers = [];
 
     this._init();
   }
@@ -80,26 +128,15 @@ export class RulerCarousel {
 
   _updateResponsiveValues() {
     const vw = window.innerWidth;
+    const config = vw <= 480 ? this.responsive.mobile
+      : vw <= 768 ? this.responsive.tablet
+      : this.responsive.desktop;
 
-    if (vw <= 480) {
-      this.itemSpacing = 36;
-      this.tickWidth = 20;
-      this.tickWidthActive = 32;
-      this.fontSize = 11;
-      this.fontSizeActive = 13;
-    } else if (vw <= 768) {
-      this.itemSpacing = 42;
-      this.tickWidth = 24;
-      this.tickWidthActive = 40;
-      this.fontSize = 12;
-      this.fontSizeActive = 14;
-    } else {
-      this.itemSpacing = 48;
-      this.tickWidth = 28;
-      this.tickWidthActive = 48;
-      this.fontSize = 13;
-      this.fontSizeActive = 16;
-    }
+    this.itemSpacing = config.itemSpacing;
+    this.tickWidth = config.tickWidth;
+    this.tickWidthActive = config.tickWidthActive;
+    this.fontSize = config.fontSize;
+    this.fontSizeActive = config.fontSizeActive;
   }
 
   _createDOM() {
@@ -147,41 +184,42 @@ export class RulerCarousel {
     window.addEventListener('mousemove', h.onMouseMove);
     window.addEventListener('mouseup', h.onMouseUp);
 
+    // Store click handlers for cleanup
     this.itemElements.forEach((el, i) => {
-      el.addEventListener('click', () => {
+      const handler = () => {
         if (this.isDisabled) return;
         const index = parseInt(el.dataset.index, 10);
 
         if (index === this.selectedIndex) {
-          // Already selected - confirm
           this.onConfirm(this.selectedIndex, this.items[this.selectedIndex]);
         } else {
-          // Select new item
           this.targetScrollY = i * this.itemSpacing;
           this.scrollPhase = 'snapping';
           this.springVelocity = 0;
           this.selectedIndex = index;
           this.onSelect(this.selectedIndex, this.items[this.selectedIndex]);
         }
-      });
+      };
+      this._itemClickHandlers.push(handler);
+      el.addEventListener('click', handler);
     });
 
     target.addEventListener('wheel', h.onWheel, { passive: false });
   }
 
-  _onTouchStart(e) {
-    if (e.touches.length !== 1) return;
+  // === Unified Pointer Handling ===
 
+  /**
+   * Common pointer start logic
+   * @private
+   */
+  _onPointerStart(clientY, target) {
     this.isPointerDown = true;
     this.hasMoved = false;
-    this.startY = e.touches[0].clientY;
-    this.tapTarget = e.target.closest('.ruler-carousel__item');
+    this.startY = clientY;
+    this.tapTarget = target.closest('.ruler-carousel__item');
 
-    // Skip drag handling when disabled, but still track for background tap
-    if (this.isDisabled) {
-      e.preventDefault();
-      return;
-    }
+    if (this.isDisabled) return false;
 
     this.isDragging = true;
     this.scrollPhase = 'dragging';
@@ -189,52 +227,51 @@ export class RulerCarousel {
     this.lastTime = performance.now();
     this.velocity = 0;
     this.springVelocity = 0;
-
-    e.preventDefault();
+    return true;
   }
 
-  _onTouchMove(e) {
-    if (e.touches.length !== 1) return;
-
-    const currentY = e.touches[0].clientY;
-
-    // Always track movement for tap detection
-    if (Math.abs(currentY - this.startY) > RulerCarousel.DRAG_THRESHOLD) {
+  /**
+   * Common pointer move logic
+   * @private
+   */
+  _onPointerMove(clientY) {
+    if (this.isPointerDown && Math.abs(clientY - this.startY) > RulerCarousel.DRAG_THRESHOLD) {
       this.hasMoved = true;
     }
 
     if (!this.isDragging) return;
 
     const currentTime = performance.now();
-    const deltaY = currentY - this.lastY;
+    const deltaY = clientY - this.lastY;
     const deltaTime = currentTime - this.lastTime;
 
     this.scrollY -= deltaY;
     this.targetScrollY = this.scrollY;
 
     if (deltaTime > 0) {
-      // Smooth velocity with exponential moving average
       const instantVelocity = -deltaY / deltaTime;
       this.velocity = this.velocity * 0.4 + instantVelocity * 0.6;
     }
 
-    this.lastY = currentY;
+    this.lastY = clientY;
     this.lastTime = currentTime;
-
-    e.preventDefault();
   }
 
-  _onTouchEnd(e) {
-    if (!this.isPointerDown) return;
+  /**
+   * Common pointer end logic
+   * @private
+   */
+  _onPointerEnd() {
+    if (!this.isPointerDown) return false;
     this.isPointerDown = false;
 
-    // Background tap detection (works even when disabled)
+    // Background tap detection
     if (!this.hasMoved && !this.tapTarget) {
       this.onBackgroundTap();
-      return;
+      return true;
     }
 
-    if (!this.isDragging) return;
+    if (!this.isDragging) return true;
     this.isDragging = false;
 
     if (!this.hasMoved && this.tapTarget) {
@@ -244,7 +281,43 @@ export class RulerCarousel {
     }
 
     this.tapTarget = null;
+    return true;
   }
+
+  // === Touch Events ===
+
+  _onTouchStart(e) {
+    if (e.touches.length !== 1) return;
+    const handled = this._onPointerStart(e.touches[0].clientY, e.target);
+    e.preventDefault();
+  }
+
+  _onTouchMove(e) {
+    if (e.touches.length !== 1) return;
+    this._onPointerMove(e.touches[0].clientY);
+    if (this.isDragging) e.preventDefault();
+  }
+
+  _onTouchEnd(e) {
+    this._onPointerEnd();
+  }
+
+  // === Mouse Events ===
+
+  _onMouseDown(e) {
+    const handled = this._onPointerStart(e.clientY, e.target);
+    if (handled) e.preventDefault();
+  }
+
+  _onMouseMove(e) {
+    this._onPointerMove(e.clientY);
+  }
+
+  _onMouseUp() {
+    this._onPointerEnd();
+  }
+
+  // === Other Events ===
 
   _handleTap(targetEl) {
     const index = parseInt(targetEl.dataset.index, 10);
@@ -261,70 +334,10 @@ export class RulerCarousel {
     }
   }
 
-  _onMouseDown(e) {
-    this.isPointerDown = true;
-    this.hasMoved = false;
-    this.startY = e.clientY;
-    this.tapTarget = e.target.closest('.ruler-carousel__item');
-
-    if (this.isDisabled) return;
-
-    this.isDragging = true;
-    this.scrollPhase = 'dragging';
-    this.lastY = this.startY;
-    this.lastTime = performance.now();
-    this.velocity = 0;
-    this.springVelocity = 0;
-    e.preventDefault();
-  }
-
-  _onMouseMove(e) {
-    const currentY = e.clientY;
-
-    // Always track movement for tap detection
-    if (this.isPointerDown && Math.abs(currentY - this.startY) > RulerCarousel.DRAG_THRESHOLD) {
-      this.hasMoved = true;
-    }
-
-    if (!this.isDragging) return;
-
-    const currentTime = performance.now();
-    const deltaY = currentY - this.lastY;
-    const deltaTime = currentTime - this.lastTime;
-
-    this.scrollY -= deltaY;
-    this.targetScrollY = this.scrollY;
-
-    if (deltaTime > 0) {
-      // Smooth velocity calculation with averaging
-      const instantVelocity = -deltaY / deltaTime;
-      this.velocity = this.velocity * 0.4 + instantVelocity * 0.6;
-    }
-
-    this.lastY = currentY;
-    this.lastTime = currentTime;
-  }
-
-  _onMouseUp() {
-    if (!this.isPointerDown) return;
-    this.isPointerDown = false;
-
-    // Background tap detection (works even when disabled)
-    if (!this.hasMoved && !this.tapTarget) {
-      this.onBackgroundTap();
-      return;
-    }
-
-    if (!this.isDragging) return;
-    this.isDragging = false;
-    this._startInertia();
-  }
-
   _onWheel(e) {
     if (this.isDisabled) return;
     e.preventDefault();
 
-    // Accumulate velocity from wheel events
     const wheelVelocity = e.deltaY * 0.03;
     this.velocity = this.velocity * 0.5 + wheelVelocity;
     this.scrollY += e.deltaY * 0.5;
@@ -333,7 +346,6 @@ export class RulerCarousel {
 
   _startInertia() {
     if (Math.abs(this.velocity) < RulerCarousel.MIN_VELOCITY) {
-      // Low velocity - go directly to snap
       this._startSnap();
     } else {
       this.scrollPhase = 'inertia';
@@ -360,7 +372,6 @@ export class RulerCarousel {
     const centerScrollY = sectionSize * centerSection;
     const distanceFromCenter = this.scrollY - centerScrollY;
 
-    // Jump back to center when too far (happens off-screen)
     if (Math.abs(distanceFromCenter) > sectionSize * 1.5) {
       const offset = ((this.scrollY % sectionSize) + sectionSize) % sectionSize;
       const newScrollY = centerScrollY + offset;
@@ -394,31 +405,24 @@ export class RulerCarousel {
   _update() {
     switch (this.scrollPhase) {
       case 'dragging':
-        // Position updated directly in touch/mouse handlers
         break;
-
       case 'inertia':
         this._updateInertia();
         break;
-
       case 'snapping':
         this._updateSnap();
         break;
-
       case 'idle':
       default:
         break;
     }
-
     this._checkLoop();
   }
 
   _updateInertia() {
-    // Apply friction
     this.velocity *= RulerCarousel.FRICTION;
-    this.scrollY += this.velocity * 16; // ~16ms per frame
+    this.scrollY += this.velocity * 16;
 
-    // Transition to snap when velocity is low enough
     if (Math.abs(this.velocity) < RulerCarousel.MIN_VELOCITY) {
       this._startSnap();
     }
@@ -427,14 +431,12 @@ export class RulerCarousel {
   _updateSnap() {
     const displacement = this.targetScrollY - this.scrollY;
 
-    // Spring physics: F = -kx - cv (stiffness and damping)
     const springForce = displacement * RulerCarousel.SPRING_STIFFNESS;
     const dampingForce = -this.springVelocity * RulerCarousel.SPRING_DAMPING;
 
     this.springVelocity += springForce + dampingForce;
     this.scrollY += this.springVelocity;
 
-    // Settle when close enough and slow enough
     if (Math.abs(displacement) < 0.5 && Math.abs(this.springVelocity) < 0.1) {
       this.scrollY = this.targetScrollY;
       this.springVelocity = 0;
@@ -467,7 +469,6 @@ export class RulerCarousel {
 
       let opacity = Math.max(0.15, 1 - normalizedDistance * 0.85);
 
-      // Edge fade zones (top/bottom 20%)
       if (screenY < visibleTop) {
         opacity *= screenY / fadeZone;
       } else if (screenY > visibleBottom) {
@@ -490,6 +491,10 @@ export class RulerCarousel {
     });
   }
 
+  /**
+   * Programmatically select an item by index.
+   * @param {number} index
+   */
   selectIndex(index) {
     if (index < 0 || index >= this.items.length) return;
 
@@ -504,6 +509,9 @@ export class RulerCarousel {
     this.onSelect(this.selectedIndex, this.items[this.selectedIndex]);
   }
 
+  /**
+   * Disable carousel interaction.
+   */
   disable() {
     this.isDisabled = true;
     if (this.isDragging) {
@@ -512,26 +520,62 @@ export class RulerCarousel {
     }
   }
 
+  /**
+   * Enable carousel interaction.
+   */
   enable() {
     this.isDisabled = false;
   }
 
+  /**
+   * Clean up all event listeners and DOM elements.
+   */
   dispose() {
+    // Stop animation
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
+      this.animationId = null;
     }
 
     const h = this._boundHandlers;
+    const target = this.eventTarget;
+
     if (h) {
+      // Remove eventTarget listeners
+      target.removeEventListener('touchstart', h.onTouchStart);
+      target.removeEventListener('touchmove', h.onTouchMove);
+      target.removeEventListener('touchend', h.onTouchEnd);
+      target.removeEventListener('touchcancel', h.onTouchEnd);
+      target.removeEventListener('mousedown', h.onMouseDown);
+      target.removeEventListener('wheel', h.onWheel);
+
+      // Remove window listeners
       window.removeEventListener('mousemove', h.onMouseMove);
       window.removeEventListener('mouseup', h.onMouseUp);
+
       if (h.onResize) {
         window.removeEventListener('resize', h.onResize);
       }
     }
 
+    // Remove item click handlers
+    this.itemElements.forEach((el, i) => {
+      if (this._itemClickHandlers[i]) {
+        el.removeEventListener('click', this._itemClickHandlers[i]);
+      }
+    });
+    this._itemClickHandlers = [];
+
+    // Remove DOM
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
+
+    // Clear references
+    this.element = null;
+    this.axisLine = null;
+    this.itemsContainer = null;
+    this.itemElements = [];
+    this._boundHandlers = null;
   }
 }
